@@ -118,6 +118,34 @@ python scripts/06_run_analyses.py
 docker-compose up -d
 ```
 
+## Web Application
+
+RioMobiAnalytics includes a full-featured web interface built with Streamlit for interactive data visualization and analysis.
+
+### Quick Start
+
+```bash
+./run_webapp.sh
+```
+
+The web application will be available at: http://localhost:8501
+
+### Features
+
+- **Interactive Map**: Visualize transit stops and complaints with risk-based color coding
+- **Risk Dashboard**: Comprehensive analytics with interactive charts and metrics
+- **Network Graph**: Graph visualization with multiple layout algorithms and metrics
+- **Data Management**: Upload data files and trigger ETL pipeline steps
+
+### Manual Start
+
+```bash
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+streamlit run webapp/app.py
+```
+
+For detailed web application documentation, see [webapp/README.md](webapp/README.md)
+
 ## ETL Pipeline
 
 ### 1. Setup Databases (01_setup_databases.py)
