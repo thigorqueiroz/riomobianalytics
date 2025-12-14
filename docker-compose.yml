@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: riomobianalytics-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: riomobianalytics2024
+      MONGO_INITDB_DATABASE: riomobianalytics
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - riomobianalytics-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.14.0-community
+    container_name: riomobianalytics-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/riomobianalytics2024
+      NEO4J_PLUGINS: '["graph-data-science"]'
+      NEO4J_dbms_memory_heap_initial__size: 256m
+      NEO4J_dbms_memory_heap_max__size: 512m
+      NEO4J_dbms_memory_pagecache_size: 256m
+      NEO4J_dbms_security_procedures_unrestricted: gds.*
+      NEO4J_dbms_security_procedures_allowlist: gds.*
+      NEO4JLABS_PLUGINS: '["graph-data-science"]'
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - riomobianalytics-network
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "riomobianalytics2024", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  neo4j_plugins:
+    driver: local
+
+networks:
+  riomobianalytics-network:
+    driver: bridge

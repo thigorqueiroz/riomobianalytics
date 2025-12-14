@@ -1,0 +1,8 @@
+neo4j==5.14.1
+pymongo==4.6.0
+pandas>=2.2.0
+numpy>=1.26.0
+geopy==2.4.1
+googlemaps==4.10.0
+python-dotenv==1.0.0
+tqdm==4.66.1
