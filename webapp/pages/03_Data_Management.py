@@ -6,30 +6,30 @@ import shutil
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-st.set_page_config(page_title="Data Management", page_icon="📤", layout="wide")
+st.set_page_config(page_title="Gerenciamento de Dados", page_icon="📤", layout="wide")
 
-st.title("Data Management & ETL Pipeline")
-st.markdown("Upload new data and trigger ETL processes")
+st.title("Gerenciamento de Dados e Pipeline ETL")
+st.markdown("Carregue novos dados e dispare processos ETL")
 
-tab1, tab2, tab3 = st.tabs(["Upload Data", "Run ETL Pipeline", "System Status"])
+tab1, tab2, tab3 = st.tabs(["Carregar Dados", "Executar Pipeline ETL", "Status do Sistema"])
 
 with tab1:
-    st.subheader("Upload Data Files")
+    st.subheader("Carregar Arquivos de Dados")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### GTFS Data")
-        st.info("Upload GTFS zip file containing transit network data")
+        st.markdown("### Dados GTFS")
+        st.info("Carregue um arquivo zip GTFS contendo dados da rede de trânsito")
 
         gtfs_file = st.file_uploader(
-            "Choose GTFS zip file",
+            "Escolha o arquivo zip GTFS",
             type=['zip'],
-            help="Upload gtfs_rio-de-janeiro.zip or similar GTFS format"
+            help="Carregue gtfs_rio-de-janeiro.zip ou similar em formato GTFS"
         )
 
         if gtfs_file is not None:
-            if st.button("Upload GTFS File", type="primary"):
+            if st.button("Carregar Arquivo GTFS", type="primary"):
                 try:
                     save_path = Path("data/gtfs") / gtfs_file.name
                     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,22 +37,22 @@ with tab1:
                     with open(save_path, "wb") as f:
                         f.write(gtfs_file.getbuffer())
 
-                    st.success(f"GTFS file uploaded successfully to {save_path}")
+                    st.success(f"Arquivo GTFS carregado com sucesso em {save_path}")
                 except Exception as e:
-                    st.error(f"Error uploading GTFS file: {str(e)}")
+                    st.error(f"Erro ao carregar arquivo GTFS: {str(e)}")
 
     with col2:
-        st.markdown("### 1746 Complaint Data")
-        st.info("Upload CSV file with citizen complaints")
+        st.markdown("### Dados de Reclamações 1746")
+        st.info("Carregue um arquivo CSV com reclamações de cidadãos")
 
         complaint_file = st.file_uploader(
-            "Choose CSV file",
+            "Escolha um arquivo CSV",
             type=['csv'],
-            help="Upload reclamacoes.csv or chamados_v2.csv"
+            help="Carregue reclamacoes.csv ou chamados_v2.csv"
         )
 
         if complaint_file is not None:
-            if st.button("Upload Complaint File", type="primary"):
+            if st.button("Carregar Arquivo de Reclamações", type="primary"):
                 try:
                     save_path = Path("data/1746") / complaint_file.name
                     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,24 +60,24 @@ with tab1:
                     with open(save_path, "wb") as f:
                         f.write(complaint_file.getbuffer())
 
-                    st.success(f"Complaint file uploaded successfully to {save_path}")
+                    st.success(f"Arquivo de reclamações carregado com sucesso em {save_path}")
                 except Exception as e:
-                    st.error(f"Error uploading complaint file: {str(e)}")
+                    st.error(f"Erro ao carregar arquivo de reclamações: {str(e)}")
 
 with tab2:
-    st.subheader("ETL Pipeline Control")
+    st.subheader("Controle do Pipeline ETL")
 
-    st.warning("⚠️ Running ETL scripts will modify the database. Make sure you have backups.")
+    st.warning("Executar scripts ETL modificará o banco de dados. Certifique-se de ter backups.")
 
-    st.markdown("### Pipeline Steps")
+    st.markdown("### Etapas do Pipeline")
 
     steps = [
-        ("01_setup_databases.py", "Setup Databases", "Initialize MongoDB and Neo4j schemas"),
-        ("02_load_gtfs_to_neo4j.py", "Load GTFS Data", "Load transit network data into Neo4j"),
-        ("03_load_1746_to_mongodb.py", "Load Complaints", "Load complaint data into MongoDB"),
-        ("04_sync_1746_to_neo4j.py", "Sync to Neo4j", "Sync complaints from MongoDB to Neo4j"),
-        ("05_calculate_metrics.py", "Calculate Metrics", "Compute risk scores and metrics"),
-        ("06_run_analyses.py", "Run Analytics", "Execute graph analytics algorithms")
+        ("01_setup_databases.py", "Configurar Bancos de Dados", "Inicializar esquemas MongoDB e Neo4j"),
+        ("02_load_gtfs_to_neo4j.py", "Carregar Dados GTFS", "Carregar dados da rede de trânsito no Neo4j"),
+        ("03_load_1746_to_mongodb.py", "Carregar Reclamações", "Carregar dados de reclamações no MongoDB"),
+        ("04_sync_1746_to_neo4j.py", "Sincronizar com Neo4j", "Sincronizar reclamações do MongoDB para Neo4j"),
+        ("05_calculate_metrics.py", "Calcular Métricas", "Calcular pontuações de risco e métricas"),
+        ("06_run_analyses.py", "Executar Análises", "Executar algoritmos de análise de grafos")
     ]
 
     for script, title, description in steps:
@@ -90,8 +90,8 @@ with tab2:
                 st.code(f"python scripts/{script}", language="bash")
 
             with col2:
-                if st.button(f"Run {title}", key=script):
-                    with st.spinner(f"Running {script}..."):
+                if st.button(f"Executar {title}", key=script):
+                    with st.spinner(f"Executando {script}..."):
                         try:
                             result = subprocess.run(
                                 [sys.executable, f"scripts/{script}"],
@@ -101,30 +101,30 @@ with tab2:
                             )
 
                             if result.returncode == 0:
-                                st.success(f"{title} completed successfully")
-                                with st.expander("View Output"):
+                                st.success(f"{title} concluído com sucesso")
+                                with st.expander("Ver Saída"):
                                     st.code(result.stdout)
                             else:
-                                st.error(f"{title} failed")
-                                with st.expander("View Error"):
+                                st.error(f"{title} falhou")
+                                with st.expander("Ver Erro"):
                                     st.code(result.stderr)
 
                         except subprocess.TimeoutExpired:
-                            st.error(f"{title} timed out after 10 minutes")
+                            st.error(f"{title} expirou após 10 minutos")
                         except Exception as e:
-                            st.error(f"Error running {title}: {str(e)}")
+                            st.error(f"Erro ao executar {title}: {str(e)}")
 
     st.divider()
 
-    st.markdown("### Run Full Pipeline")
-    st.info("Execute all ETL steps in sequence")
+    st.markdown("### Executar Pipeline Completo")
+    st.info("Executar todas as etapas ETL em sequência")
 
-    if st.button("Run Complete Pipeline", type="primary", use_container_width=True):
+    if st.button("Executar Pipeline Completo", type="primary", use_container_width=True):
         progress_bar = st.progress(0)
         status_text = st.empty()
 
         for i, (script, title, description) in enumerate(steps):
-            status_text.text(f"Running step {i+1}/{len(steps)}: {title}")
+            status_text.text(f"Executando etapa {i+1}/{len(steps)}: {title}")
             progress_bar.progress((i) / len(steps))
 
             try:
@@ -136,26 +136,26 @@ with tab2:
                 )
 
                 if result.returncode == 0:
-                    st.success(f"✓ {title} completed")
+                    st.success(f"✓ {title} concluído")
                 else:
-                    st.error(f"✗ {title} failed")
+                    st.error(f"✗ {title} falhou")
                     st.code(result.stderr)
                     break
 
             except Exception as e:
-                st.error(f"Error in {title}: {str(e)}")
+                st.error(f"Erro em {title}: {str(e)}")
                 break
 
         progress_bar.progress(1.0)
-        status_text.text("Pipeline complete!")
+        status_text.text("Pipeline concluído!")
 
 with tab3:
-    st.subheader("System Status")
+    st.subheader("Status do Sistema")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### MongoDB Status")
+        st.markdown("### Status do MongoDB")
 
         try:
             from webapp.utils.db_connections import get_mongo_db
@@ -164,20 +164,20 @@ with tab3:
             count = db.reclamacoes_1746_raw.count_documents({})
             synced = db.reclamacoes_1746_raw.count_documents({"synced_to_neo4j": True})
 
-            st.success("MongoDB connected")
-            st.metric("Total Complaints", f"{count:,}")
-            st.metric("Synced to Neo4j", f"{synced:,}")
+            st.success("MongoDB conectado")
+            st.metric("Total de Reclamações", f"{count:,}")
+            st.metric("Sincronizado com Neo4j", f"{synced:,}")
 
             if count > 0:
                 sync_percentage = (synced / count) * 100
                 st.progress(sync_percentage / 100)
-                st.caption(f"{sync_percentage:.1f}% synced")
+                st.caption(f"{sync_percentage:.1f}% sincronizado")
 
         except Exception as e:
-            st.error(f"MongoDB connection failed: {str(e)}")
+            st.error(f"Falha na conexão com MongoDB: {str(e)}")
 
     with col2:
-        st.markdown("### Neo4j Status")
+        st.markdown("### Status do Neo4j")
 
         try:
             from webapp.utils.db_connections import query_neo4j
@@ -188,16 +188,16 @@ with tab3:
             result = query_neo4j("MATCH ()-[r]->() RETURN count(r) as total")
             total_relationships = result[0]['total'] if result else 0
 
-            st.success("Neo4j connected")
-            st.metric("Total Nodes", f"{total_nodes:,}")
-            st.metric("Total Relationships", f"{total_relationships:,}")
+            st.success("Neo4j conectado")
+            st.metric("Total de Nós", f"{total_nodes:,}")
+            st.metric("Total de Relacionamentos", f"{total_relationships:,}")
 
         except Exception as e:
-            st.error(f"Neo4j connection failed: {str(e)}")
+            st.error(f"Falha na conexão com Neo4j: {str(e)}")
 
     st.divider()
 
-    st.markdown("### Data Directory Status")
+    st.markdown("### Status do Diretório de Dados")
 
     data_path = Path("data")
 
@@ -208,7 +208,7 @@ with tab3:
         col3, col4 = st.columns(2)
 
         with col3:
-            st.markdown("**GTFS Files**")
+            st.markdown("**Arquivos GTFS**")
             if gtfs_path.exists():
                 files = list(gtfs_path.glob("*"))
                 if files:
@@ -216,12 +216,12 @@ with tab3:
                         size_mb = f.stat().st_size / (1024 * 1024)
                         st.text(f"📄 {f.name} ({size_mb:.1f} MB)")
                 else:
-                    st.warning("No GTFS files found")
+                    st.warning("Nenhum arquivo GTFS encontrado")
             else:
-                st.warning("GTFS directory not found")
+                st.warning("Diretório GTFS não encontrado")
 
         with col4:
-            st.markdown("**Complaint Files**")
+            st.markdown("**Arquivos de Reclamações**")
             if complaints_path.exists():
                 files = list(complaints_path.glob("*.csv"))
                 if files:
@@ -229,11 +229,11 @@ with tab3:
                         size_mb = f.stat().st_size / (1024 * 1024)
                         st.text(f"📄 {f.name} ({size_mb:.1f} MB)")
                 else:
-                    st.warning("No complaint files found")
+                    st.warning("Nenhum arquivo de reclamações encontrado")
             else:
-                st.warning("Complaints directory not found")
+                st.warning("Diretório de reclamações não encontrado")
 
     else:
-        st.warning("Data directory not found")
+        st.warning("Diretório de dados não encontrado")
 
-st.info("💡 Refresh this page after running ETL steps to see updated statistics")
+st.info("Atualize esta página após executar as etapas ETL para ver as estatísticas atualizadas")

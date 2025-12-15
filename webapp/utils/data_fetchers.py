@@ -7,12 +7,14 @@ def get_stops_with_risk():
     query = """
     MATCH (s:Stop)
     RETURN s.id as id, s.name as name, s.lat as lat, s.lon as lon,
-           s.risk_score as risk_score, s.risk_level as risk_level,
+           s.risk_score as risk_score,
+           COALESCE(s.risk_score_normalized, 0) as risk_score_normalized,
+           s.risk_level as risk_level,
            s.total_reclamacoes as total_complaints,
            s.betweenness_centrality as centrality,
            s.pagerank as pagerank,
            s.community_id as community
-    ORDER BY s.risk_score DESC
+    ORDER BY s.risk_score_normalized DESC
     """
     data = query_neo4j(query)
     return pd.DataFrame(data)
@@ -62,17 +64,19 @@ def get_network_graph_data():
 def get_system_stats():
     query = """
     MATCH (s:Stop)
+    WHERE s.risk_score IS NOT NULL
     WITH count(s) as total_stops,
-         avg(s.risk_score) as avg_risk,
-         count(CASE WHEN s.risk_score >= 0.6 THEN 1 END) as high_risk_stops
+         avg(s.risk_score_normalized) as avg_risk_normalized,
+         percentileCont(s.risk_score_normalized, 0.67) as p67,
+         count(CASE WHEN s.risk_level = 'Alto' THEN 1 END) as high_risk_stops
     MATCH (r:Route)
-    WITH total_stops, avg_risk, high_risk_stops, count(r) as total_routes
+    WITH total_stops, avg_risk_normalized, p67, high_risk_stops, count(r) as total_routes
     MATCH (rec:Reclamacao)
-    WITH total_stops, avg_risk, high_risk_stops, total_routes,
+    WITH total_stops, avg_risk_normalized, p67, high_risk_stops, total_routes,
          count(rec) as total_complaints,
          count(CASE WHEN rec.status = 'Aberto' THEN 1 END) as open_complaints
     RETURN total_stops, total_routes, total_complaints, open_complaints,
-           avg_risk, high_risk_stops
+           avg_risk_normalized as avg_risk, high_risk_stops
     """
     data = query_neo4j(query)
     return data[0] if data else {}

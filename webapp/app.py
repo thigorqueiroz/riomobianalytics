@@ -14,9 +14,9 @@ st.set_page_config(
 )
 
 st.title("RioMobiAnalytics")
-st.markdown("Transit risk analysis system for Rio de Janeiro")
+st.markdown("Sistema de análise de risco de trânsito para Rio de Janeiro")
 
-st.sidebar.success("Select a page above")
+st.sidebar.success("Selecione uma página acima")
 
 try:
     stats = get_system_stats()
@@ -25,25 +25,25 @@ try:
 
     with col1:
         st.metric(
-            "Total Stops",
+            "Total de Paradas",
             f"{stats.get('total_stops', 0):,}",
         )
 
     with col2:
         st.metric(
-            "Transit Routes",
+            "Rotas de Trânsito",
             f"{stats.get('total_routes', 0):,}",
         )
 
     with col3:
         st.metric(
-            "Total Complaints",
+            "Total de Reclamações",
             f"{stats.get('total_complaints', 0):,}",
         )
 
     with col4:
         st.metric(
-            "Open Complaints",
+            "Reclamações Abertas",
             f"{stats.get('open_complaints', 0):,}",
         )
 
@@ -53,47 +53,47 @@ try:
 
     with col5:
         avg_risk = stats.get('avg_risk', 0)
-        risk_level = "High" if avg_risk > 0.6 else "Medium" if avg_risk > 0.3 else "Low"
+        risk_level = "Alto" if avg_risk > 67 else "Médio" if avg_risk > 33 else "Baixo"
         st.metric(
-            "System Average Risk",
-            f"{avg_risk:.3f}",
+            "Risco Médio do Sistema",
+            f"{avg_risk:.1f}",
             delta=None,
-            help="Average risk score across all transit stops"
+            help="Pontuação de risco média (escala 0-100)"
         )
-        st.write(f"**{risk_level}** Risk Level")
+        st.write(f"**{risk_level}** Nível de Risco")
 
     with col6:
         high_risk = stats.get('high_risk_stops', 0)
         st.metric(
-            "High Risk Stops",
+            "Paradas com Alto Risco",
             f"{high_risk:,}",
-            help="Stops with risk score >= 0.6"
+            help="Paradas no top 33% de risco (score >= 67)"
         )
 
     st.divider()
 
-    st.subheader("About")
+    st.subheader("Sobre")
     st.markdown("""
-    **RioMobiAnalytics** integrates GTFS transit data with 1746 citizen complaints to:
+    **RioMobiAnalytics** integra dados de trânsito GTFS com 1746 reclamações de cidadãos para:
 
-    - **Map Visualization**: Interactive map showing risk levels across the transit network
-    - **Risk Dashboard**: Analytics and metrics for stops, routes, and complaints
-    - **Network Graph**: Graph analysis showing connectivity and critical nodes
-    - **Data Management**: Upload new data and trigger ETL pipelines
+    - **Visualização em Mapa**: Mapa interativo mostrando níveis de risco na rede de trânsito
+    - **Painel de Risco**: Análises e métricas de paradas, rotas e reclamações
+    - **Grafo de Rede**: Análise de grafos mostrando conectividade e nós críticos
+    - **Gerenciamento de Dados**: Carregue novos dados e dispare pipelines ETL
 
-    ### Architecture
-    - **MongoDB**: Stores raw complaint data with geospatial indexing
-    - **Neo4j**: Graph database for transit network and relationships
-    - **Graph Analytics**: Betweenness centrality, PageRank, community detection
+    ### Arquitetura
+    - **MongoDB**: Armazena dados brutos de reclamações com indexação geoespacial
+    - **Neo4j**: Banco de dados de grafo para rede de trânsito e relacionamentos
+    - **Análise de Grafos**: Centralidade de intermediação, PageRank, detecção de comunidades
 
-    ### Navigation
-    Use the sidebar to navigate between different analysis pages.
+    ### Navegação
+    Use a barra lateral para navegar entre diferentes páginas de análise.
     """)
 
     st.divider()
 
-    st.info("Note: Data is cached for 5 minutes. Refresh to see latest updates.")
+    st.info("Nota: Os dados são armazenados em cache por 5 minutos. Atualize para ver as alterações mais recentes.")
 
 except Exception as e:
-    st.error(f"Error loading system data: {str(e)}")
-    st.info("Make sure MongoDB and Neo4j are running and accessible.")
+    st.error(f"Erro ao carregar dados do sistema: {str(e)}")
+    st.info("Certifique-se de que MongoDB e Neo4j estão em execução e acessíveis.")

@@ -14,6 +14,7 @@ class MetricsCalculator:
         print("Calculating risk scores...")
 
         with self.driver.session() as session:
+            # Step 1: Calculate raw risk scores
             result = session.run("""
                 MATCH (s:Stop)<-[a:AFFECTS]-(rec:Reclamacao)
                 WHERE rec.status IN ['Aberto', 'Em Atendimento']
@@ -27,24 +28,112 @@ class MetricsCalculator:
                 SET s.total_reclamacoes = total_reclamacoes,
                     s.reclamacoes_abertas = abertas,
                     s.risk_score = risk_sum / (risk_sum + 10.0),
-                    s.risk_level = CASE
-                      WHEN risk_sum >= 5.0 THEN 'Alto'
-                      WHEN risk_sum >= 2.0 THEN 'Medio'
-                      ELSE 'Baixo'
-                    END,
                     s.last_risk_update = datetime()
 
                 RETURN count(s) AS paradas_atualizadas,
                        avg(s.risk_score) AS avg_risk,
-                       max(s.risk_score) AS max_risk
+                       max(s.risk_score) AS max_risk,
+                       min(s.risk_score) AS min_risk
             """)
 
             record = result.single()
-
             if record:
                 print(f"{record['paradas_atualizadas']} stops updated")
                 if record['avg_risk'] is not None:
                     print(f"Avg: {record['avg_risk']:.3f}, Max: {record['max_risk']:.3f}")
+
+            # Step 2: Calculate percentiles and normalize
+            result = session.run("""
+                MATCH (s:Stop)
+                WHERE s.risk_score IS NOT NULL
+                WITH min(s.risk_score) as min_score,
+                     max(s.risk_score) as max_score
+                RETURN min_score, max_score
+            """)
+
+            bounds = result.single()
+            if not bounds:
+                return False
+
+            min_score = bounds['min_score']
+            max_score = bounds['max_score']
+
+            # Normalize all scores
+            result = session.run("""
+                MATCH (s:Stop)
+                WHERE s.risk_score IS NOT NULL
+                SET s.risk_score_normalized =
+                  CASE
+                    WHEN $max_score = $min_score THEN 50.0
+                    ELSE (s.risk_score - $min_score) / ($max_score - $min_score) * 100.0
+                  END
+                RETURN count(s) as stops_normalized
+            """, max_score=max_score, min_score=min_score)
+
+            record = result.single()
+            if record:
+                print(f"{record['stops_normalized']} stops normalized to 0-100 scale")
+
+            # Get count of stops with risk
+            result = session.run("""
+                MATCH (s:Stop)
+                WHERE s.risk_score_normalized > 0
+                RETURN count(s) as total_with_risk
+            """)
+
+            total_with_risk = result.single()['total_with_risk']
+            third = total_with_risk // 3
+
+            # Set risk levels using ordered queries
+            # Top 1/3: Alto
+            session.run(f"""
+                MATCH (s:Stop)
+                WHERE s.risk_score_normalized > 0
+                WITH s
+                ORDER BY s.risk_score_normalized DESC
+                LIMIT {third}
+                SET s.risk_level = 'Alto'
+            """)
+
+            # Middle 1/3: Médio
+            session.run(f"""
+                MATCH (s:Stop)
+                WHERE s.risk_score_normalized > 0
+                WITH s
+                ORDER BY s.risk_score_normalized DESC
+                SKIP {third}
+                LIMIT {third}
+                SET s.risk_level = 'Medio'
+            """)
+
+            # Bottom 1/3: Baixo
+            session.run(f"""
+                MATCH (s:Stop)
+                WHERE s.risk_score_normalized > 0
+                WITH s
+                ORDER BY s.risk_score_normalized DESC
+                SKIP {third * 2}
+                SET s.risk_level = 'Baixo'
+            """)
+
+            # Set all zero-score stops to Baixo
+            session.run("""
+                MATCH (s:Stop)
+                WHERE s.risk_score_normalized = 0
+                SET s.risk_level = 'Baixo'
+            """)
+
+            # Verify distribution
+            result = session.run("""
+                MATCH (s:Stop)
+                RETURN count(CASE WHEN s.risk_level = 'Alto' THEN 1 END) as alto,
+                       count(CASE WHEN s.risk_level = 'Medio' THEN 1 END) as medio,
+                       count(CASE WHEN s.risk_level = 'Baixo' THEN 1 END) as baixo
+            """)
+
+            record = result.single()
+            if record:
+                print(f"Final distribution - Alto:{record['alto']}, Médio:{record['medio']}, Baixo:{record['baixo']}")
 
             return True
 
