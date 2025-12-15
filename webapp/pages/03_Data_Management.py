@@ -6,6 +6,8 @@ import shutil
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
+from webapp.utils.footer_console import render_query_console
+
 st.set_page_config(page_title="Gerenciamento de Dados", page_icon="📤", layout="wide")
 
 st.title("Gerenciamento de Dados e Pipeline ETL")
@@ -237,3 +239,7 @@ with tab3:
         st.warning("Diretório de dados não encontrado")
 
 st.info("Atualize esta página após executar as etapas ETL para ver as estatísticas atualizadas")
+
+# Render query console footer
+with st.container():
+    render_query_console()

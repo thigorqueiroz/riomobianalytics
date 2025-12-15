@@ -1,6 +1,8 @@
 import pandas as pd
 from .db_connections import get_mongo_db, query_neo4j
 import streamlit as st
+from .query_logger import QueryLogger
+import time
 
 @st.cache_data(ttl=300)
 def get_stops_with_risk():
@@ -10,10 +12,7 @@ def get_stops_with_risk():
            s.risk_score as risk_score,
            COALESCE(s.risk_score_normalized, 0) as risk_score_normalized,
            s.risk_level as risk_level,
-           s.total_reclamacoes as total_complaints,
-           s.betweenness_centrality as centrality,
-           s.pagerank as pagerank,
-           s.community_id as community
+           s.total_reclamacoes as total_complaints
     ORDER BY s.risk_score_normalized DESC
     """
     data = query_neo4j(query)
@@ -34,6 +33,7 @@ def get_routes_with_metrics():
 @st.cache_data(ttl=300)
 def get_complaints_summary():
     db = get_mongo_db()
+    start_time = time.time()
 
     pipeline = [
         {"$group": {
@@ -45,6 +45,10 @@ def get_complaints_summary():
     ]
 
     results = list(db.reclamacoes_1746_raw.aggregate(pipeline))
+
+    duration_ms = (time.time() - start_time) * 1000
+    QueryLogger.log_mongodb("aggregate", {"collection": "reclamacoes_1746_raw"}, None, duration_ms)
+
     return pd.DataFrame(results).rename(columns={"_id": "category"})
 
 @st.cache_data(ttl=300)
@@ -85,19 +89,10 @@ def get_system_stats():
 def get_top_critical_stops(limit=10):
     query = f"""
     MATCH (s:Stop)
-    WHERE s.betweenness_centrality > 0
-    RETURN s.name as name, s.betweenness_centrality as centrality,
-           s.risk_score as risk, s.lat as lat, s.lon as lon,
-           CASE
-             WHEN s.betweenness_centrality > 0.05 AND s.risk_score > 0.6
-             THEN 'CRITICAL'
-             WHEN s.betweenness_centrality > 0.05
-             THEN 'Structurally Critical'
-             WHEN s.risk_score > 0.6
-             THEN 'High Risk'
-             ELSE 'Normal'
-           END as classification
-    ORDER BY s.betweenness_centrality DESC
+    WHERE s.risk_score > 0
+    RETURN s.name as name, s.risk_score as risk, s.lat as lat, s.lon as lon,
+           s.risk_level as risk_level
+    ORDER BY s.risk_score DESC
     LIMIT {limit}
     """
     data = query_neo4j(query)
@@ -106,10 +101,152 @@ def get_top_critical_stops(limit=10):
 @st.cache_data(ttl=300)
 def get_complaints_by_location():
     db = get_mongo_db()
+    start_time = time.time()
 
     complaints = list(db.reclamacoes_1746_raw.find(
         {},
         {"protocolo": 1, "lat": 1, "lon": 1, "servico": 1, "status": 1, "peso": 1, "criticidade": 1}
     ).limit(1000))
 
+    duration_ms = (time.time() - start_time) * 1000
+    QueryLogger.log_mongodb("find", {"collection": "reclamacoes_1746_raw"}, None, duration_ms)
+
     return pd.DataFrame(complaints)
+
+@st.cache_data(ttl=300)
+def get_stop_details(stop_id):
+    """Get detailed information about a specific stop"""
+    query = """
+    MATCH (s:Stop {id: $stop_id})
+    OPTIONAL MATCH (r:Route)-[:SERVES]->(s)
+    OPTIONAL MATCH (rec:Reclamacao)-[:AFFECTS]->(s)
+    WHERE rec.status IN ['Aberto', 'Em Atendimento']
+    RETURN
+      s.id as id,
+      s.name as name,
+      s.lat as lat,
+      s.lon as lon,
+      s.risk_score as risk_score,
+      s.risk_level as risk_level,
+      s.total_reclamacoes as total_complaints,
+      s.reclamacoes_abertas as open_complaints,
+      s.wheelchair_accessible as wheelchair_accessible,
+      collect(DISTINCT r.short_name) as routes,
+      count(DISTINCT rec) as active_complaints
+    """
+    data = query_neo4j(query, {"stop_id": stop_id})
+    return data[0] if data else None
+
+@st.cache_data(ttl=300)
+def get_stop_complaints(stop_id):
+    """Get all complaints affecting a specific stop"""
+    query = """
+    MATCH (rec:Reclamacao)-[:AFFECTS]->(s:Stop {id: $stop_id})
+    RETURN
+      rec.protocolo as protocolo,
+      rec.data_abertura as data_abertura,
+      rec.servico as servico,
+      rec.status as status,
+      rec.criticidade as criticidade,
+      rec.peso as peso,
+      rec.bairro as bairro,
+      rec.descricao as descricao
+    ORDER BY rec.data_abertura DESC
+    """
+    data = query_neo4j(query, {"stop_id": stop_id})
+    return pd.DataFrame(data)
+
+@st.cache_data(ttl=300)
+def get_complaint_details(protocolo):
+    """Get detailed information about a specific complaint"""
+    query = """
+    MATCH (rec:Reclamacao {protocolo: $protocolo})
+    OPTIONAL MATCH (rec)-[:AFFECTS]->(s:Stop)
+    OPTIONAL MATCH (rec)-[:HAS_TYPE]->(c:Categoria)
+    RETURN
+      rec.id as id,
+      rec.protocolo as protocolo,
+      rec.data_abertura as data_abertura,
+      rec.servico as servico,
+      rec.status as status,
+      rec.criticidade as criticidade,
+      rec.peso as peso,
+      rec.lat as lat,
+      rec.lon as lon,
+      rec.bairro as bairro,
+      rec.descricao as descricao,
+      collect(DISTINCT s.name) as affected_stops,
+      count(DISTINCT s) as stop_count,
+      c.peso_base as category_weight
+    """
+    data = query_neo4j(query, {"protocolo": protocolo})
+    return data[0] if data else None
+
+@st.cache_data(ttl=300)
+def get_nearby_complaints(lat, lon, radius_meters=500):
+    """Get complaints near a specific location"""
+    db = get_mongo_db()
+    start_time = time.time()
+
+    complaints = list(db.reclamacoes_1746_raw.find(
+        {
+            "localizacao": {
+                "$near": {
+                    "$geometry": {
+                        "type": "Point",
+                        "coordinates": [lon, lat]
+                    },
+                    "$maxDistance": radius_meters
+                }
+            }
+        },
+        {
+            "protocolo": 1,
+            "data_abertura": 1,
+            "servico": 1,
+            "status": 1,
+            "peso": 1,
+            "criticidade": 1,
+            "bairro": 1,
+            "lat": 1,
+            "lon": 1
+        }
+    ).limit(50))
+
+    duration_ms = (time.time() - start_time) * 1000
+    QueryLogger.log_mongodb("geoNear", {"collection": "reclamacoes_1746_raw"}, None, duration_ms)
+
+    return pd.DataFrame(complaints)
+
+@st.cache_data(ttl=300)
+def get_stop_routes(stop_id):
+    """Get all routes serving a specific stop"""
+    query = """
+    MATCH (r:Route)-[:SERVES]->(s:Stop {id: $stop_id})
+    RETURN
+      r.id as id,
+      r.short_name as short_name,
+      r.long_name as long_name,
+      r.type as type,
+      r.avg_risk_score as avg_risk
+    ORDER BY r.short_name
+    """
+    data = query_neo4j(query, {"stop_id": stop_id})
+    return pd.DataFrame(data)
+
+@st.cache_data(ttl=300)
+def get_connected_stops(stop_id, hops=2):
+    """Get stops connected to a specific stop"""
+    query = f"""
+    MATCH (start:Stop {{id: $stop_id}})-[:CONNECTS_TO*1..{hops}]-(connected:Stop)
+    RETURN
+      connected.id as id,
+      connected.name as name,
+      connected.risk_score as risk_score,
+      connected.risk_level as risk_level,
+      connected.total_reclamacoes as total_complaints
+    ORDER BY connected.risk_score DESC
+    LIMIT 50
+    """
+    data = query_neo4j(query, {"stop_id": stop_id})
+    return pd.DataFrame(data)

@@ -5,6 +5,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.data_fetchers import get_system_stats
+from utils.footer_console import render_query_console
+from utils.query_logger import QueryLogger
 
 st.set_page_config(
     page_title="RioMobiAnalytics",
@@ -78,13 +80,13 @@ try:
 
     - **Visualização em Mapa**: Mapa interativo mostrando níveis de risco na rede de trânsito
     - **Painel de Risco**: Análises e métricas de paradas, rotas e reclamações
-    - **Grafo de Rede**: Análise de grafos mostrando conectividade e nós críticos
+    - **Grafo de Rede**: Análise de grafos mostrando conectividade entre paradas
+    - **Explorador**: Busque e explore detalhes sobre paradas e reclamações
     - **Gerenciamento de Dados**: Carregue novos dados e dispare pipelines ETL
 
     ### Arquitetura
     - **MongoDB**: Armazena dados brutos de reclamações com indexação geoespacial
     - **Neo4j**: Banco de dados de grafo para rede de trânsito e relacionamentos
-    - **Análise de Grafos**: Centralidade de intermediação, PageRank, detecção de comunidades
 
     ### Navegação
     Use a barra lateral para navegar entre diferentes páginas de análise.
@@ -97,3 +99,7 @@ try:
 except Exception as e:
     st.error(f"Erro ao carregar dados do sistema: {str(e)}")
     st.info("Certifique-se de que MongoDB e Neo4j estão em execução e acessíveis.")
+
+# Render query console footer
+with st.container():
+    render_query_console()

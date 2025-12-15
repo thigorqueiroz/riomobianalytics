@@ -79,15 +79,14 @@ RioMobiAnalytics is an academic project demonstrating advanced graph database co
 ### Neo4j Responsibilities
 
 1. **Graph Representation**: Models transit network as nodes and relationships
-2. **Network Analysis**: Calculates centrality, PageRank, communities
-3. **Risk Scoring**: Combines complaints with network topology
-4. **Relationship Queries**: Finds paths, connected components, affected routes
+2. **Risk Scoring**: Combines complaints with network topology
+3. **Relationship Queries**: Finds paths, connected components, affected routes
 
 **Why Neo4j for Transit Network?**
 - Natural representation of "Stop A connects to Stop B"
 - Efficient traversal queries (find all stops on a route, shortest paths)
-- Built-in graph algorithms (centrality, community detection)
 - Relationship properties (distance, travel time, risk-adjusted cost)
+- Support for risk-aware routing algorithms
 
 ---
 
@@ -112,11 +111,7 @@ Represents a physical transit stop location.
   total_reclamacoes: Integer,      // Total complaints within radius
   reclamacoes_abertas: Integer,    // Open complaints
 
-  // Graph Analytics Results
-  betweenness_centrality: Float,   // Structural importance
-  pagerank: Float,                 // Network importance
-  community_id: Integer,           // Community assignment
-
+  // Risk metadata
   created_at: DateTime,
   last_risk_update: DateTime
 })
@@ -407,15 +402,6 @@ The ETL pipeline must run in this specific order due to dependencies:
 │ • Calculates risk scores for stops                           │
 │ • Updates risk_adjusted_cost on CONNECTS_TO relationships    │
 │ • Aggregates metrics to routes                               │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 06_run_analyses.py                                          │
-│ • Creates graph projection for GDS algorithms                │
-│ • Calculates betweenness centrality                          │
-│ • Detects communities (Louvain)                              │
-│ • Calculates PageRank                                        │
-│ • Identifies complaint clusters                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -739,112 +725,6 @@ Uses Dijkstra's algorithm with risk-adjusted costs instead of pure distance.
 
 ---
 
-## Graph Algorithms
-
-### 1. Betweenness Centrality
-
-**What it Measures**: How many shortest paths pass through this node.
-
-**Formula**: For node v:
-```
-BC(v) = Σ (σ_st(v) / σ_st)
-```
-Where σ_st = total shortest paths from s to t, and σ_st(v) = paths that pass through v.
-
-**Implementation**:
-
-```cypher
-CALL gds.betweenness.write('transportNetwork', {
-  writeProperty: 'betweenness_centrality'
-})
-```
-
-**Interpretation**:
-- **High centrality** = structural bottleneck, many routes depend on this stop
-- If a high-centrality stop fails, it impacts many trips
-- High centrality + high risk = **critical vulnerability**
-
-**Example**: A transfer hub where 5 bus routes meet will have high centrality because all paths using those routes pass through it.
-
-### 2. Louvain Community Detection
-
-**What it Finds**: Groups of densely connected stops that form "communities."
-
-**Algorithm**:
-1. Start with each node in its own community
-2. Move nodes to neighboring communities to maximize modularity
-3. Aggregate communities and repeat
-4. Continue until modularity can't be improved
-
-**Implementation**:
-
-```cypher
-CALL gds.louvain.write('transportNetwork', {
-  writeProperty: 'community_id',
-  relationshipWeightProperty: 'distance_meters'
-})
-```
-
-**Interpretation**:
-- Stops in the same community are well-connected (many routes between them)
-- Communities often correspond to geographic neighborhoods
-- Useful for analyzing "if this community has high risk, is it isolated or does it spread?"
-
-**Why weight by distance?** Stops close together are more likely to be in the same functional neighborhood.
-
-### 3. PageRank
-
-**What it Measures**: Importance based on incoming connections.
-
-**Formula**: Iterative calculation:
-```
-PR(v) = (1-d)/N + d × Σ(PR(u) / OutDegree(u))
-```
-Where d = damping factor (0.85), N = total nodes.
-
-**Implementation**:
-
-```cypher
-CALL gds.pageRank.write('transportNetwork', {
-  writeProperty: 'pagerank',
-  dampingFactor: 0.85,
-  maxIterations: 20
-})
-```
-
-**Interpretation**:
-- **High PageRank** = many stops connect TO this stop, or it's connected to by important stops
-- Major transfer hubs have high PageRank
-- Different from centrality: PageRank cares about being a destination, centrality about being on paths
-
-**Example**: A central station where many routes terminate will have high PageRank even if paths don't go through it (unlike centrality).
-
-### 4. Clustering Analysis
-
-**Pattern**: Find complaints that cluster in space and time.
-
-```cypher
-MATCH (r1:Reclamacao), (r2:Reclamacao)
-WHERE id(r1) < id(r2)
-  AND r1.servico = r2.servico
-  AND point.distance(
-    point({latitude: r1.lat, longitude: r1.lon}),
-    point({latitude: r2.lat, longitude: r2.lon})
-  ) <= 200  // Within 200m
-  AND duration.between(r1.data_abertura, r2.data_abertura).days <= 7  // Within 7 days
-
-MERGE (r1)-[c:CLUSTERS_WITH]->(r2)
-SET c.spatial_proximity_meters = round(point.distance(...)),
-    c.temporal_proximity_hours = duration.between(...).hours
-```
-
-**Interpretation**:
-- Complaint clusters suggest systemic issues (not isolated incidents)
-- Can identify "hot spots" that need intervention
-- Multiple complaints about lighting in one area = broken infrastructure
-
----
-
 ## Key Cypher Queries Explained
 
 ### Query 1: Find Most Vulnerable Routes
@@ -1154,8 +1034,7 @@ This project demonstrates:
 - ✅ Temporal functions (datetime, duration)
 - ✅ Path finding (shortest path, variable-length paths)
 - ✅ Aggregations and grouping
-- ✅ Graph algorithms (GDS library)
-- ✅ Projections and in-memory graphs
+- ✅ Risk-adjusted graph queries
 
 ### Database Design
 - ✅ When to use graph vs document databases
@@ -1167,9 +1046,8 @@ This project demonstrates:
 ### Real-World Applications
 - ✅ Transit network analysis
 - ✅ Risk assessment and scoring
-- ✅ Spatial-temporal clustering
-- ✅ Community detection
-- ✅ Centrality analysis for infrastructure planning
+- ✅ Spatial-temporal complaint analysis
+- ✅ Safety-aware routing optimization
 
 ---
 
@@ -1191,21 +1069,16 @@ This project demonstrates:
    - Simulate stop failures and measure network impact
    - Identify single points of failure
 
-5. **Advanced GDS Algorithms**:
-   - Node similarity (find stops with similar complaint patterns)
-   - Link prediction (predict where new routes should be added)
-   - Triangle counting (measure network clustering)
-
 ---
 
 ## Conclusion
 
 RioMobiAnalytics demonstrates how Neo4j's graph model naturally represents transportation networks while MongoDB efficiently handles geospatial complaint data. The hybrid architecture leverages each database's strengths:
 
-- **Neo4j**: Relationship-heavy queries, network analysis, graph algorithms
+- **Neo4j**: Relationship-heavy queries, network analysis, risk-adjusted routing
 - **MongoDB**: Geospatial queries, flexible schema, fast inserts
 
-The risk scoring methodology combines spatial proximity, complaint severity, and network topology to identify vulnerable transit infrastructure. Graph algorithms reveal structural importance (centrality), community structure (Louvain), and network influence (PageRank).
+The risk scoring methodology combines spatial proximity, complaint severity, and network topology to identify vulnerable transit infrastructure.
 
 This academic project provides hands-on experience with:
 - Production-grade graph database design

@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from webapp.utils.data_fetchers import get_network_graph_data, get_stops_with_risk
+from webapp.utils.footer_console import render_query_console
 
 st.set_page_config(page_title="Grafo de Rede", page_icon="🕸️", layout="wide")
 
@@ -32,12 +33,6 @@ try:
                 value=200,
                 step=50,
                 help="Mais arestas = renderização mais lenta"
-            )
-
-            color_by = st.selectbox(
-                "Colorir Nós Por",
-                ["Pontuação de Risco", "Centralidade", "PageRank", "Comunidade"],
-                index=0
             )
 
             show_labels = st.checkbox("Mostrar Rótulos de Nós", value=False)
@@ -103,20 +98,9 @@ try:
                 node_text.append(
                     f"Nome: {info.get('name', 'Desconhecido')}<br>"
                     f"Risco: {info.get('risk_score', 0):.3f}<br>"
-                    f"Centralidade: {info.get('centrality', 0):.4f}<br>"
-                    f"PageRank: {info.get('pagerank', 0):.6f}<br>"
-                    f"Comunidade: {info.get('community', 'N/A')}<br>"
                     f"Reclamações: {int(info.get('total_complaints', 0))}"
                 )
-
-                if color_by == "Pontuação de Risco":
-                    node_color.append(info.get('risk_score', 0))
-                elif color_by == "Centralidade":
-                    node_color.append(info.get('centrality', 0))
-                elif color_by == "PageRank":
-                    node_color.append(info.get('pagerank', 0))
-                else:
-                    node_color.append(info.get('community', 0))
+                node_color.append(info.get('risk_score', 0))
             else:
                 node_text.append("Sem dados")
                 node_color.append(0)
@@ -131,12 +115,12 @@ try:
             hovertext=node_text,
             marker=dict(
                 showscale=True,
-                colorscale='Reds' if color_by == "Pontuação de Risco" else 'Viridis',
+                colorscale='Reds',
                 color=node_color,
                 size=10,
                 colorbar=dict(
                     thickness=15,
-                    title=color_by,
+                    title="Pontuação de Risco",
                     xanchor='left',
                     x=1.02
                 ),
@@ -183,21 +167,21 @@ try:
 
         st.divider()
 
-        st.subheader("Nós Mais Conectados")
+        st.subheader("Paradas com Maior Risco")
 
-        degree_centrality = nx.degree_centrality(G)
-        top_nodes = sorted(degree_centrality.items(), key=lambda x: x[1], reverse=True)[:10]
+        # Sort stops by risk score instead
+        top_stops_by_risk = sorted([(node_id, stop_dict.get(node_id, {}).get('risk_score', 0))
+                                     for node_id in G.nodes() if node_id in stop_dict],
+                                    key=lambda x: x[1], reverse=True)[:10]
 
         top_nodes_data = []
-        for node_id, degree in top_nodes:
-            if node_id in stop_dict:
-                info = stop_dict[node_id]
-                top_nodes_data.append({
-                    "Nome": info.get('name', 'Desconhecido'),
-                    "Centralidade de Grau": f"{degree:.4f}",
-                    "Pontuação de Risco": f"{info.get('risk_score', 0):.3f}",
-                    "Total de Reclamações": int(info.get('total_complaints', 0))
-                })
+        for node_id, risk_score in top_stops_by_risk:
+            info = stop_dict[node_id]
+            top_nodes_data.append({
+                "Nome": info.get('name', 'Desconhecido'),
+                "Pontuação de Risco": f"{info.get('risk_score', 0):.3f}",
+                "Total de Reclamações": int(info.get('total_complaints', 0))
+            })
 
         st.table(top_nodes_data)
 
@@ -206,3 +190,7 @@ except Exception as e:
     st.exception(e)
 
 st.info("Passe o mouse sobre os nós para ver detalhes. Use o algoritmo de layout para explorar diferentes visualizações.")
+
+# Render query console footer
+with st.container():
+    render_query_console()
