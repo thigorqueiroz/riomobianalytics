@@ -138,7 +138,7 @@ try:
                     thickness=15,
                     title=color_by,
                     xanchor='left',
-                    titleside='right'
+                    x=1.02
                 ),
                 line_width=2
             )
@@ -146,8 +146,10 @@ try:
 
         fig = go.Figure(data=edge_trace + [node_trace],
                        layout=go.Layout(
-                           title=f'Transit Network Graph ({len(G.nodes())} nodes, {len(G.edges())} edges)',
-                           titlefont_size=16,
+                           title=dict(
+                               text=f'Transit Network Graph ({len(G.nodes())} nodes, {len(G.edges())} edges)',
+                               font=dict(size=16)
+                           ),
                            showlegend=False,
                            hovermode='closest',
                            margin=dict(b=0, l=0, r=0, t=40),
