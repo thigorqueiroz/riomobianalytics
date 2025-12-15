@@ -11,7 +11,7 @@ class MetricsCalculator:
         )
 
     def calculate_risk_scores(self):
-        print("Calculating stop risk scores...")
+        print("Calculating risk scores...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -42,15 +42,14 @@ class MetricsCalculator:
             record = result.single()
 
             if record:
-                print(f"Updated {record['paradas_atualizadas']} stops")
+                print(f"{record['paradas_atualizadas']} stops updated")
                 if record['avg_risk'] is not None:
-                    print(f"Avg risk: {record['avg_risk']:.3f}")
-                    print(f"Max risk: {record['max_risk']:.3f}")
+                    print(f"Avg: {record['avg_risk']:.3f}, Max: {record['max_risk']:.3f}")
 
             return True
 
     def update_connection_costs(self):
-        print("\nUpdating connection costs...")
+        print("Updating connections...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -63,12 +62,12 @@ class MetricsCalculator:
             """)
 
             record = result.single()
-            print(f"Updated {record['conexoes_atualizadas']} connections")
+            print(f"{record['conexoes_atualizadas']} connections updated")
 
             return True
 
     def update_route_metrics(self):
-        print("\nUpdating route metrics...")
+        print("Updating routes...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -86,7 +85,7 @@ class MetricsCalculator:
             """)
 
             record = result.single()
-            print(f"Updated {record['rotas_atualizadas']} routes")
+            print(f"{record['rotas_atualizadas']} routes updated")
 
             return True
 
@@ -94,18 +93,18 @@ class MetricsCalculator:
         self.driver.close()
 
     def run(self):
-        print("Calculating metrics...\n")
+        print("Metrics Calculator\n")
 
         try:
             self.calculate_risk_scores()
             self.update_connection_costs()
             self.update_route_metrics()
 
-            print("\nMetrics calculation complete")
+            print("\nMetrics updated successfully")
             return True
 
         except Exception as e:
-            print(f"\nMetrics calculation error: {e}")
+            print(f"\nCalculation failed: {e}")
             import traceback
             traceback.print_exc()
             return False

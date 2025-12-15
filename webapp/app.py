@@ -53,14 +53,14 @@ try:
 
     with col5:
         avg_risk = stats.get('avg_risk', 0)
-        risk_color = "🔴" if avg_risk > 0.6 else "🟡" if avg_risk > 0.3 else "🟢"
+        risk_level = "High" if avg_risk > 0.6 else "Medium" if avg_risk > 0.3 else "Low"
         st.metric(
             "System Average Risk",
             f"{avg_risk:.3f}",
             delta=None,
             help="Average risk score across all transit stops"
         )
-        st.write(f"{risk_color} Risk Level")
+        st.write(f"**{risk_level}** Risk Level")
 
     with col6:
         high_risk = stats.get('high_risk_stops', 0)
@@ -76,10 +76,10 @@ try:
     st.markdown("""
     **RioMobiAnalytics** integrates GTFS transit data with 1746 citizen complaints to:
 
-    - 📍 **Map Visualization**: Interactive map showing risk levels across the transit network
-    - 📊 **Risk Dashboard**: Analytics and metrics for stops, routes, and complaints
-    - 🕸️ **Network Graph**: Graph analysis showing connectivity and critical nodes
-    - 📤 **Data Management**: Upload new data and trigger ETL pipelines
+    - **Map Visualization**: Interactive map showing risk levels across the transit network
+    - **Risk Dashboard**: Analytics and metrics for stops, routes, and complaints
+    - **Network Graph**: Graph analysis showing connectivity and critical nodes
+    - **Data Management**: Upload new data and trigger ETL pipelines
 
     ### Architecture
     - **MongoDB**: Stores raw complaint data with geospatial indexing
@@ -92,7 +92,7 @@ try:
 
     st.divider()
 
-    st.info("💡 Tip: All data is cached for 5 minutes. Refresh the page to see the latest updates.")
+    st.info("Note: Data is cached for 5 minutes. Refresh to see latest updates.")
 
 except Exception as e:
     st.error(f"Error loading system data: {str(e)}")

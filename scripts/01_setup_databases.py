@@ -5,7 +5,7 @@ from neo4j import GraphDatabase
 import config
 
 def setup_mongodb():
-    print("Setting up MongoDB...")
+    print("Configuring MongoDB...")
 
     try:
         client = MongoClient(config.MONGO_URI)
@@ -16,17 +16,17 @@ def setup_mongodb():
         db.reclamacoes_1746_raw.create_index("data_abertura")
         db.reclamacoes_1746_raw.create_index([("localizacao", "2dsphere")])
 
-        print("MongoDB configured")
+        print("MongoDB ready")
         client.close()
         return True
 
     except Exception as e:
-        print(f"Failed to configure MongoDB: {e}")
+        print(f"MongoDB setup failed: {e}")
         return False
 
 
 def setup_neo4j():
-    print("Setting up Neo4j...")
+    print("Configuring Neo4j...")
 
     try:
         driver = GraphDatabase.driver(
@@ -35,7 +35,7 @@ def setup_neo4j():
         )
 
         with driver.session() as session:
-            print("Clearing existing data...")
+            print("Clearing database...")
             deleted_total = 0
             while True:
                 result = session.run("""
@@ -49,10 +49,9 @@ def setup_neo4j():
                 if deleted == 0:
                     break
                 if deleted_total % 5000 == 0:
-                    print(f"Deleted {deleted_total} nodes so far...")
-            print(f"Deleted {deleted_total} nodes total")
+                    print(f"{deleted_total} nodes removed...")
+            print(f"Cleared {deleted_total} nodes")
 
-            print("Creating constraints...")
             constraints = [
                 "CREATE CONSTRAINT stop_id_unique IF NOT EXISTS FOR (s:Stop) REQUIRE s.id IS UNIQUE",
                 "CREATE CONSTRAINT route_id_unique IF NOT EXISTS FOR (r:Route) REQUIRE r.id IS UNIQUE",
@@ -65,7 +64,6 @@ def setup_neo4j():
             for constraint in constraints:
                 session.run(constraint)
 
-            print("Creating indexes...")
             indices = [
                 "CREATE INDEX stop_name IF NOT EXISTS FOR (s:Stop) ON (s.name)",
                 "CREATE INDEX stop_risk IF NOT EXISTS FOR (s:Stop) ON (s.risk_score)",
@@ -83,24 +81,24 @@ def setup_neo4j():
                 "FOR (r:Reclamacao) ON EACH [r.descricao, r.servico]"
             )
 
-            print("Neo4j configured")
+            print("Neo4j ready")
 
         driver.close()
         return True
 
     except Exception as e:
-        print(f"Failed to configure Neo4j: {e}")
+        print(f"Neo4j setup failed: {e}")
         return False
 
 
 if __name__ == "__main__":
-    print("Starting database setup...\n")
+    print("Database Setup\n")
 
     mongo_ok = setup_mongodb()
     neo4j_ok = setup_neo4j()
 
     if mongo_ok and neo4j_ok:
-        print("\nSetup complete")
+        print("\nDatabases configured successfully")
         sys.exit(0)
     else:
         print("\nSetup failed")

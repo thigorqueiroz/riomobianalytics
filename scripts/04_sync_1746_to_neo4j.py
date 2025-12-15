@@ -17,23 +17,21 @@ class Neo4jSync:
         )
 
     def sync_reclamacoes(self):
-        print("Syncing complaints to Neo4j...")
-
         reclamacoes = list(self.mongo_db.reclamacoes_1746_raw.find({
             'synced_to_neo4j': False
         }))
 
-        print(f"Found {len(reclamacoes)} complaints to sync")
+        print(f"Syncing {len(reclamacoes)} complaints...")
 
         if len(reclamacoes) == 0:
-            print("No pending complaints")
+            print("Nothing to sync")
             return True
 
         synced_count = 0
         error_count = 0
 
         with self.neo4j_driver.session() as session:
-            for rec in tqdm(reclamacoes, desc="Syncing"):
+            for rec in tqdm(reclamacoes, desc="Complaints"):
                 try:
                     result = session.run("""
                         MERGE (rec:Reclamacao {id: $rec_id})
@@ -117,15 +115,15 @@ class Neo4jSync:
         self.neo4j_driver.close()
 
     def run(self):
-        print("Starting 1746 -> Neo4j sync...\n")
+        print("Neo4j Sync\n")
 
         try:
             self.sync_reclamacoes()
-            print("\nSync complete")
+            print("\nSync completed successfully")
             return True
 
         except Exception as e:
-            print(f"\nSync error: {e}")
+            print(f"\nSync failed: {e}")
             import traceback
             traceback.print_exc()
             return False

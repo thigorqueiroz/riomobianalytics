@@ -17,8 +17,6 @@ class GTFSLoader:
         self.gtfs_dir = config.GTFS_DIR
 
     def extract_gtfs_zip(self):
-        print("\nChecking GTFS files...")
-
         zip_path = os.path.join(self.gtfs_dir, "gtfs_rio-de-janeiro.zip")
         required_files = ['stops.txt', 'routes.txt', 'trips.txt', 'stop_times.txt']
 
@@ -28,20 +26,18 @@ class GTFSLoader:
         )
 
         if all_exist:
-            print("GTFS files already extracted")
             return True
 
         if not os.path.exists(zip_path):
             print(f"Zip file not found: {zip_path}")
             return False
 
-        print(f"Extracting {zip_path}...")
+        print("Extracting GTFS archive...")
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.gtfs_dir)
                 extracted_files = zip_ref.namelist()
-                print(f"Extracted {len(extracted_files)} files")
 
                 missing = [f for f in required_files
                           if not os.path.exists(os.path.join(self.gtfs_dir, f))]
@@ -53,22 +49,20 @@ class GTFSLoader:
                 for f in required_files:
                     file_path = os.path.join(self.gtfs_dir, f)
                     size_mb = os.path.getsize(file_path) / (1024 * 1024)
-                    print(f"{f}: {size_mb:.1f} MB")
+                    print(f"  {f}: {size_mb:.1f}MB")
 
                 return True
 
         except Exception as e:
-            print(f"Error extracting zip: {e}")
+            print(f"Extraction failed: {e}")
             return False
 
     def load_stops(self):
-        print("\nLoading stops...")
-
         df = pd.read_csv(f"{self.gtfs_dir}/stops.txt")
-        print(f"Found {len(df)} stops")
+        print(f"Loading {len(df)} stops...")
 
         with self.driver.session() as session:
-            for _, row in tqdm(df.iterrows(), total=len(df), desc="Inserting"):
+            for _, row in tqdm(df.iterrows(), total=len(df), desc="Stops"):
                 session.run("""
                     CREATE (:Stop {
                         id: $id,
@@ -92,16 +86,12 @@ class GTFSLoader:
                     wheelchair=bool(row.get('wheelchair_boarding', 0) == 1)
                 )
 
-        print("Stops loaded")
-
     def load_routes(self):
-        print("\nLoading routes...")
-
         df = pd.read_csv(f"{self.gtfs_dir}/routes.txt")
-        print(f"Found {len(df)} routes")
+        print(f"Loading {len(df)} routes...")
 
         with self.driver.session() as session:
-            for _, row in tqdm(df.iterrows(), total=len(df), desc="Inserting"):
+            for _, row in tqdm(df.iterrows(), total=len(df), desc="Routes"):
                 session.run("""
                     CREATE (:Route {
                         id: $id,
@@ -121,16 +111,12 @@ class GTFSLoader:
                     color=str(row.get('route_color', 'FFFFFF'))
                 )
 
-        print("Routes loaded")
-
     def load_trips(self):
-        print("\nLoading trips...")
-
         df = pd.read_csv(f"{self.gtfs_dir}/trips.txt")
-        print(f"Found {len(df)} trips")
+        print(f"Loading {len(df)} trips...")
 
         with self.driver.session() as session:
-            for _, row in tqdm(df.iterrows(), total=len(df), desc="Inserting"):
+            for _, row in tqdm(df.iterrows(), total=len(df), desc="Trips"):
                 session.run("""
                     CREATE (:Trip {
                         id: $id,
@@ -147,10 +133,8 @@ class GTFSLoader:
                     service_type=str(row.get('service_id', 'weekday'))
                 )
 
-        print("Trips loaded")
-
     def create_trip_route_relationships(self):
-        print("\nCreating Trip->Route relationships...")
+        print("Linking trips to routes...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -161,13 +145,11 @@ class GTFSLoader:
             """)
 
             record = result.single()
-            print(f"Created {record['total']} relationships")
+            print(f"Created {record['total']} links")
 
     def load_stop_times_and_connections(self):
-        print("\nLoading stop times and connections...")
-
         df = pd.read_csv(f"{self.gtfs_dir}/stop_times.txt")
-        print(f"Found {len(df)} records")
+        print(f"Loading {len(df)} stop times...")
 
         df = df.sort_values(['trip_id', 'stop_sequence'])
 
@@ -175,7 +157,7 @@ class GTFSLoader:
         total_batches = len(df) // batch_size + 1
 
         with self.driver.session() as session:
-            for i in tqdm(range(0, len(df), batch_size), desc="Processing", total=total_batches):
+            for i in tqdm(range(0, len(df), batch_size), desc="Stop times", total=total_batches):
                 batch = df.iloc[i:i+batch_size]
 
                 for _, row in batch.iterrows():
@@ -195,8 +177,7 @@ class GTFSLoader:
                         departure=str(row['departure_time'])
                     )
 
-        print("Stop times loaded")
-        print("\nCreating CONNECTS_TO relationships...")
+        print("Building stop connections...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -222,7 +203,7 @@ class GTFSLoader:
             print(f"Created {record['total']} connections")
 
     def create_route_serves_relationships(self):
-        print("\nCreating Route->Stop relationships...")
+        print("Linking routes to stops...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -236,10 +217,10 @@ class GTFSLoader:
             """)
 
             record = result.single()
-            print(f"Created {record['total']} relationships")
+            print(f"Created {record['total']} links")
 
     def create_neighborhoods(self):
-        print("\nCreating neighborhoods...")
+        print("Setting up neighborhoods...")
 
         neighborhoods = [
             {"name": "Copacabana", "regiao": "Zona Sul", "populacao": 146392},
@@ -263,17 +244,15 @@ class GTFSLoader:
                     })
                 """, **n)
 
-        print(f"Created {len(neighborhoods)} neighborhoods")
-
     def close(self):
         self.driver.close()
 
     def run(self):
-        print("Loading GTFS data to Neo4j...\n")
+        print("GTFS Loader\n")
 
         try:
             if not self.extract_gtfs_zip():
-                print("\nFailed to extract GTFS files")
+                print("Extraction failed")
                 return False
 
             self.load_stops()
@@ -284,11 +263,11 @@ class GTFSLoader:
             self.create_route_serves_relationships()
             self.create_neighborhoods()
 
-            print("\nGTFS load complete")
+            print("\nGTFS data loaded successfully")
             return True
 
         except Exception as e:
-            print(f"\nGTFS load error: {e}")
+            print(f"\nLoad failed: {e}")
             import traceback
             traceback.print_exc()
             return False

@@ -11,7 +11,7 @@ class GraphAnalyzer:
         )
 
     def create_graph_projection(self):
-        print("Creating graph projection...")
+        print("Building graph projection...")
 
         with self.driver.session() as session:
             try:
@@ -19,7 +19,6 @@ class GraphAnalyzer:
                 exists = result.single()["exists"]
                 if exists:
                     session.run("CALL gds.graph.drop('transportNetwork')")
-                    print("Removed previous projection")
             except Exception as e:
                 pass
 
@@ -35,10 +34,8 @@ class GraphAnalyzer:
                 )
             """)
 
-            print("Graph projection created")
-
     def calculate_betweenness_centrality(self):
-        print("\nCalculating betweenness centrality...")
+        print("Calculating centrality...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -54,10 +51,7 @@ class GraphAnalyzer:
             """)
 
             record = result.single()
-
-            print(f"Centrality calculated")
-            print(f"Avg: {record['avg_centrality']:.6f}")
-            print(f"Max: {record['max_centrality']:.6f}")
+            print(f"Avg: {record['avg_centrality']:.6f}, Max: {record['max_centrality']:.6f}")
 
             result = session.run("""
                 MATCH (s:Stop)
@@ -79,7 +73,7 @@ class GraphAnalyzer:
                 LIMIT 10
             """)
 
-            print("\nTop 10 critical stops:")
+            print("Top 10 critical stops:")
             for i, record in enumerate(result, 1):
                 print(f"  {i}. {record['parada'][:40]:40} | "
                       f"Cent: {record['centralidade']:.4f} | "
@@ -87,7 +81,7 @@ class GraphAnalyzer:
                       f"{record['classificacao']}")
 
     def detect_communities(self):
-        print("\nDetecting communities (Louvain)...")
+        print("Detecting communities...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -101,9 +95,7 @@ class GraphAnalyzer:
             """)
 
             record = result.single()
-
-            print(f"Detected {record['communityCount']} communities")
-            print(f"Modularity: {record['modularity']:.4f}")
+            print(f"{record['communityCount']} communities, Modularity: {record['modularity']:.4f}")
 
             result = session.run("""
                 MATCH (s:Stop)
@@ -126,14 +118,14 @@ class GraphAnalyzer:
                 LIMIT 10
             """)
 
-            print("\nTop 10 communities by risk:")
+            print("Top 10 by risk:")
             for i, record in enumerate(result, 1):
                 print(f"  {i}. Community {record['community']} | "
                       f"Size: {record['tamanho']} | "
                       f"Risk: {record['risco_medio']:.2f}")
 
     def calculate_pagerank(self):
-        print("\nCalculating PageRank...")
+        print("Calculating PageRank...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -148,10 +140,7 @@ class GraphAnalyzer:
             """)
 
             record = result.single()
-
-            print(f"PageRank calculated")
-            print(f"Updated {record['nodePropertiesWritten']} nodes")
-            print(f"Ran {record['ranIterations']} iterations")
+            print(f"{record['nodePropertiesWritten']} nodes, {record['ranIterations']} iterations")
 
             result = session.run("""
                 MATCH (s:Stop)
@@ -164,14 +153,14 @@ class GraphAnalyzer:
                 LIMIT 10
             """)
 
-            print("\nTop 10 stops by importance:")
+            print("Top 10 by importance:")
             for i, record in enumerate(result, 1):
                 print(f"  {i}. {record['parada'][:40]:40} | "
                       f"PageRank: {record['importancia']:.6f} | "
                       f"Risk: {record['risco']:.2f}")
 
     def identify_reclamacao_clusters(self):
-        print("\nIdentifying complaint clusters...")
+        print("Identifying clusters...")
 
         with self.driver.session() as session:
             result = session.run("""
@@ -197,10 +186,12 @@ class GraphAnalyzer:
             """)
 
             record = result.single()
-            print(f"Created {record['clusters_criados']} cluster relationships")
+            print(f"{record['clusters_criados']} cluster links created")
 
     def generate_summary_report(self):
-        print("\nGenerating summary report...\n")
+        print("\n" + "=" * 60)
+        print("  SYSTEM SUMMARY")
+        print("=" * 60)
 
         with self.driver.session() as session:
             result = session.run("""
@@ -222,15 +213,11 @@ class GraphAnalyzer:
 
             stats = result.single()
 
-            print("=" * 60)
-            print("  RIOMOBIANALYTICS SYSTEM SUMMARY")
-            print("=" * 60)
-            print(f"\nTransit Stops: {stats['total_stops']}")
-            print(f"Routes: {stats['total_routes']}")
-            print(f"Total Complaints: {stats['total_reclamacoes']}")
-            print(f"Open Complaints: {stats['reclamacoes_abertas']}")
-            print(f"\nAvg System Risk: {stats['avg_risk']:.3f}")
-            print(f"High Risk Stops: {stats['high_risk_count']}")
+            print(f"\nStops: {stats['total_stops']:,}")
+            print(f"Routes: {stats['total_routes']:,}")
+            print(f"Complaints: {stats['total_reclamacoes']:,} ({stats['reclamacoes_abertas']:,} open)")
+            print(f"\nAvg Risk: {stats['avg_risk']:.3f}")
+            print(f"High Risk Stops: {stats['high_risk_count']:,}")
 
             result = session.run("""
                 MATCH (c:Categoria)<-[:HAS_TYPE]-(rec:Reclamacao)
@@ -241,17 +228,17 @@ class GraphAnalyzer:
                 LIMIT 5
             """)
 
-            print("\nTop 5 complaint categories:")
+            print("\nTop Complaint Categories:")
             for i, record in enumerate(result, 1):
-                print(f"  {i}. {record['categoria']:30} - {record['total']} complaints")
+                print(f"  {i}. {record['categoria']:30} {record['total']:,}")
 
-            print("\n" + "=" * 60 + "\n")
+            print("=" * 60)
 
     def close(self):
         self.driver.close()
 
     def run(self):
-        print("Running graph analyses...\n")
+        print("Graph Analyzer\n")
 
         try:
             self.create_graph_projection()
@@ -261,11 +248,11 @@ class GraphAnalyzer:
             self.identify_reclamacao_clusters()
             self.generate_summary_report()
 
-            print("\nAnalyses complete")
+            print("\nAnalysis completed successfully\n")
             return True
 
         except Exception as e:
-            print(f"\nAnalysis error: {e}")
+            print(f"\nAnalysis failed: {e}")
             import traceback
             traceback.print_exc()
             return False

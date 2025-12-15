@@ -21,8 +21,6 @@ class Reclamacoes1746Loader:
             raise ValueError(f"Unknown CSV format. Columns: {df.columns.tolist()}")
 
     def map_chamados_v2(self, df):
-        print("Mapping chamados_v2 columns...")
-
         mapped_df = df.copy()
 
         rename_dict = {}
@@ -40,14 +38,13 @@ class Reclamacoes1746Loader:
         missing = [col for col in required if col not in mapped_df.columns]
 
         if missing:
-            raise ValueError(f"Missing required columns after mapping: {missing}")
+            raise ValueError(f"Missing required columns: {missing}")
 
         null_coords = mapped_df[['latitude', 'longitude']].isnull().any(axis=1).sum()
         if null_coords > 0:
-            print(f"Ignoring {null_coords} records with null coordinates")
+            print(f"Dropping {null_coords} records with null coordinates")
             mapped_df = mapped_df.dropna(subset=['latitude', 'longitude'])
 
-        print(f"Mapping complete: {len(mapped_df)} valid records")
         return mapped_df
 
     def normalize_categoria(self, servico):
@@ -69,13 +66,11 @@ class Reclamacoes1746Loader:
         return 'Baixa'
 
     def load_from_csv(self):
-        print("Loading 1746 complaints from CSV...")
-
         df = pd.read_csv(config.RECLAMACOES_1746_FILE)
-        print(f"Found {len(df)} complaints in file")
+        print(f"Loading {len(df)} complaints...")
 
         csv_format = self.detect_csv_format(df)
-        print(f"Detected format: {csv_format}")
+        print(f"Format: {csv_format}")
 
         if csv_format == 'chamados_v2':
             df = self.map_chamados_v2(df)
@@ -85,16 +80,14 @@ class Reclamacoes1746Loader:
 
             if missing:
                 print(f"Missing columns: {missing}")
-                print(f"Available columns: {df.columns.tolist()}")
+                print(f"Available: {df.columns.tolist()}")
                 return False
-
-        print("\nProcessing and inserting to MongoDB...")
 
         inserted_count = 0
         duplicates_count = 0
         errors_count = 0
 
-        for _, row in tqdm(df.iterrows(), total=len(df), desc="Inserting"):
+        for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing"):
             try:
                 if pd.notna(row['data_abertura']):
                     data_abertura = pd.to_datetime(row['data_abertura'])
@@ -147,10 +140,8 @@ class Reclamacoes1746Loader:
         return True
 
     def create_summary(self):
-        print("\nData summary:")
-
         total = self.collection.count_documents({})
-        print(f"Total complaints: {total}")
+        print(f"\nTotal: {total} complaints")
 
         pipeline = [
             {'$group': {
@@ -160,7 +151,7 @@ class Reclamacoes1746Loader:
             {'$sort': {'count': -1}}
         ]
 
-        print("\nBy category:")
+        print("By category:")
         for doc in self.collection.aggregate(pipeline):
             print(f"  {doc['_id']}: {doc['count']}")
 
@@ -171,7 +162,7 @@ class Reclamacoes1746Loader:
             }}
         ]
 
-        print("\nBy status:")
+        print("By status:")
         for doc in self.collection.aggregate(pipeline):
             print(f"  {doc['_id']}: {doc['count']}")
 
@@ -179,18 +170,18 @@ class Reclamacoes1746Loader:
         self.client.close()
 
     def run(self):
-        print("Loading 1746 complaints to MongoDB...\n")
+        print("1746 Complaint Loader\n")
 
         try:
             success = self.load_from_csv()
             if success:
                 self.create_summary()
-                print("\n1746 load complete")
+                print("\nComplaints loaded successfully")
                 return True
             return False
 
         except Exception as e:
-            print(f"\n1746 load error: {e}")
+            print(f"\nLoad failed: {e}")
             import traceback
             traceback.print_exc()
             return False
