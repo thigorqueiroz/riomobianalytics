@@ -961,340 +961,104 @@ ORDER BY year, month
 
 ## Risk Scoring Methodology
 
-### Design Rationale and Threshold Philosophy
-
-**Core Objective**: Create a quantitative measure of transit stop vulnerability that balances:
-- **Frequency**: How many complaints affect a stop
-- **Severity**: Which types of complaints and their urgency
-- **Recency**: Recent issues are more relevant than historical ones
-- **Proximity**: Only complaints geographically close to the stop matter
-- **Feasibility**: Thresholds must be actionable for urban planners
-
-### Multi-Factor Risk Formula
+### Risk Formula
 
 **Components**:
 
-1. **Category Weight** (peso): Different complaint types have different severity and impact
+1. **Category Weight** (peso): How serious each complaint type is
    ```python
    CATEGORIA_PESOS = {
-       'Segurança Pública': 1.5,      # Highest: directly affects passenger safety
-       'Trânsito e Transporte': 0.8,  # Service reliability issues
-       'Iluminação Pública': 0.6,     # Safety at night, moderate impact
-       'Conservação de Vias': 0.5,    # Infrastructure quality
-       'Limpeza Urbana': 0.4,         # Environmental quality, lower direct impact
-       'Outros': 0.3                  # Uncategorized, assumed lower severity
+       'Segurança Pública': 1.5,      # Security (highest priority)
+       'Trânsito e Transporte': 0.8,  # Service issues
+       'Iluminação Pública': 0.6,     # Lighting
+       'Conservação de Vias': 0.5,    # Road quality
+       'Limpeza Urbana': 0.4,         # Cleanliness
+       'Outros': 0.3                  # Other
    }
    ```
 
-   **Rationale**:
-   - Security complaints (theft, violence) directly threaten passenger safety → highest weight
-   - Service issues prevent people from using transit → high weight
-   - Lighting affects perceived safety but not immediate danger → medium weight
-   - Infrastructure and cleanliness affect experience but not immediate safety → lower weight
-   - Weights are relative; absolute values matter less than the hierarchy
-
-2. **Criticality Multiplier**: Complaint urgency assigned by the 1746 system
+2. **Criticality Level**: Urgency assigned by the 1746 system
    ```python
    CRITICIDADE_MAP = {
-       'Alta': 1.5,    # Urgent issues requiring immediate attention
-       'Média': 1.0,   # Standard baseline
-       'Baixa': 0.5    # Low urgency issues
+       'Alta': 1.5,    # Urgent
+       'Média': 1.0,   # Standard
+       'Baixa': 0.5    # Low urgency
    }
    ```
 
-   **Rationale**:
-   - Multiplier amplifies weight when system flagged complaint as urgent
-   - Baseline = 1.0 (no amplification) for medium criticality
-   - High criticality = 1.5x worse than medium
-   - Low criticality = 0.5x severity of medium
-   - Uses multiplication to scale within category, not to override category weight
-
-3. **Individual Contribution**:
+3. **Individual Risk Contribution**:
    ```
-   risk_contribution = peso × criticidade
+   risk_contribution = category_weight × criticality
    ```
 
-   **Example combinations**:
+4. **Sum Complaints Within 100m**:
    ```
-   Segurança (Alta)  = 1.5 × 1.5 = 2.25  (worst case)
-   Segurança (Média) = 1.5 × 1.0 = 1.50
-   Segurança (Baixa) = 1.5 × 0.5 = 0.75
-   Iluminação (Alta) = 0.6 × 1.5 = 0.90
-   Limpeza (Alta)    = 0.4 × 1.5 = 0.60
+   risk_sum = Σ(risk_contribution)
    ```
 
-4. **Aggregated Risk Sum**:
-   ```
-   risk_sum = Σ(risk_contribution for all complaints within 100m)
-   ```
-
-   **Why aggregation matters**:
-   - Single incident: risk_sum = 2.25 (not critical)
-   - Pattern of issues: risk_sum = 2.25 × 5 = 11.25 (critical)
-   - Distinguishes isolated complaints from systemic problems
-   - Lower bound of ~0.3, no upper bound (unbounded sum allows detection of extreme risk)
-
-5. **Normalized Risk Score** (0-1 scale):
+5. **Normalize to 0-1 Scale**:
    ```
    risk_score = risk_sum / (risk_sum + 10.0)
    ```
 
-   **Why This Formula?** (Sigmoid-like normalization)
+### Risk Level Classification
 
-   This formula creates a normalized score with specific mathematical properties:
-
-   ```
-   risk_sum = 0   → score = 0.000  (no complaints)
-   risk_sum = 1   → score = 0.091  (1 low complaint)
-   risk_sum = 5   → score = 0.333  (multiple complaints)
-   risk_sum = 10  → score = 0.500  (moderate problem)
-   risk_sum = 20  → score = 0.667  (serious problem)
-   risk_sum = 50  → score = 0.833  (critical)
-   risk_sum = 100 → score = 0.909  (extreme)
-   ```
-
-   **Mathematical Properties**:
-   - **Bounded**: Always produces 0 ≤ score < 1 (asymptotically approaches 1)
-   - **Diminishing Returns**: Adding complaints has decreasing marginal impact
-     - First 5 units of risk_sum: gain 0.333 points
-     - Next 10 units of risk_sum: gain only 0.167 points (half the gain)
-   - **No Saturation**: Never completely max out (no stop is "definitely safe")
-   - **Requires Accumulation**: Single complaint can't cause high risk; requires pattern
-
-   **Tuning Parameter Analysis**:
-
-   The "+10" denominator is the key tuning parameter. Why 10?
-
-   ```
-   With "+10": A stop needs risk_sum ≈ 15 to reach high risk (0.6 score)
-   With "+5":  A stop needs risk_sum ≈ 7.5 to reach high risk (more sensitive)
-   With "+20": A stop needs risk_sum ≈ 30 to reach high risk (less sensitive)
-   ```
-
-   - **+10 is moderate**: Balances sensitivity to new problems with stability
-   - **Too low (+5)**: Few complaints create high risk → volatility, false alarms
-   - **Too high (+20)**: Many complaints needed for action → slow response
-   - **Chosen value**: Requires 5-10 medium-severity complaints to be flagged high-risk
-
-### Risk Level Thresholds
-
-```cypher
-CASE
-  WHEN risk_score >= 0.6 THEN 'Alto'      # High risk
-  WHEN risk_score >= 0.333 THEN 'Medio'   # Medium risk
-  ELSE 'Baixo'                            # Low risk
-END
 ```
-
-**Threshold Rationale**:
-
-1. **High Risk (≥ 0.6)**
-   - Corresponds to risk_sum ≈ 15+ (5-10 significant complaints)
-   - **Action**: Immediate inspection, prioritize for fixes
-   - **Rationale**: 60% of maximum achievable score indicates systemic problem
-   - **Affected Population**: Typically 5+ active complaints suggests widespread issue
-
-2. **Medium Risk (≥ 0.333)**
-   - Corresponds to risk_sum ≈ 5 (3-5 moderate complaints or 1-2 serious ones)
-   - **Action**: Monitor closely, plan repairs
-   - **Rationale**: 33% score indicates notable but not critical problems
-   - **Affected Population**: Small but consistent group of complaints
-
-3. **Low Risk (< 0.333)**
-   - Corresponds to risk_sum < 5 (1-2 complaints or isolated incidents)
-   - **Action**: No immediate action, track for patterns
-   - **Rationale**: Sporadic complaints, likely isolated incidents
-   - **Affected Population**: One or two people affected, not systemic
+risk_score >= 0.6   → 'Alto' (High risk)
+risk_score >= 0.333 → 'Medio' (Medium risk)
+risk_score < 0.333  → 'Baixo' (Low risk)
+```
 
 ### Example Calculation
 
-**Scenario**: Stop has 3 nearby complaints:
-
-1. Segurança Pública (Alta): 1.5 × 1.5 = 2.25
-2. Iluminação Pública (Média): 0.6 × 1.0 = 0.60
-3. Limpeza Urbana (Baixa): 0.4 × 0.5 = 0.20
+**Stop with 3 nearby complaints**:
+- Segurança Pública (Alta): 1.5 × 1.5 = 2.25
+- Iluminação Pública (Média): 0.6 × 1.0 = 0.60
+- Limpeza Urbana (Baixa): 0.4 × 0.5 = 0.20
 
 ```
 risk_sum = 2.25 + 0.60 + 0.20 = 3.05
-risk_score = 3.05 / (3.05 + 10.0) = 3.05 / 13.05 = 0.234
-risk_level = 'Baixo' (< 0.333)
+risk_score = 3.05 / (3.05 + 10.0) = 0.234 → 'Baixo'
 ```
 
-**If we add 5 more Segurança Pública (Alta) complaints**:
-
+**If we add 5 more Segurança (Alta) complaints**:
 ```
 risk_sum = 3.05 + (5 × 2.25) = 14.30
-risk_score = 14.30 / (14.30 + 10.0) = 14.30 / 24.30 = 0.588
-risk_level = 'Medio' (≥ 0.333, < 0.6)
+risk_score = 14.30 / 24.30 = 0.588 → 'Medio'
 ```
 
-**Key Insight**: Single complaint barely registers (0.234), but pattern of 8 complaints raises it to medium risk (0.588). This prevents reactive responses to noise while catching systemic issues.
+**Why this approach**: Single complaints register as low risk, but patterns accumulate to trigger alerts. Prevents reactive responses to noise while catching systemic issues.
 
-### Spatial Filtering: 100-Meter Radius
+### Filtering Rules
 
-Complaints are linked to stops within 100 meters:
+**Spatial**: Link complaints to stops within 100 meters
+- Rio bus stops are 200-500m apart, so 100m captures genuinely nearby issues
+- Accounts for GPS imprecision in mobile reports
 
-```cypher
-WHERE point.distance(
-  point({latitude: rec.lat, longitude: rec.lon}),
-  point({latitude: s.lat, longitude: s.lon})
-) <= 100  // meters
+**Temporal**: Only consider complaints from last 30 days
+- Focuses on current problems (most fixes happen in 2-4 weeks)
+- Prevents old resolved issues from affecting current risk
+
+**Status**: Only open/in-progress complaints ('Aberto', 'Em Atendimento')
+- Closed complaints indicate resolved problems
+- Risk should reflect NOW, not history
+
+### Risk-Adjusted Connection Costs
+
+```
+risk_adjusted_cost = distance_meters × (1 + combined_risk)
+
+where:
+  combined_risk = (source_risk_score + target_risk_score) / 2
 ```
 
-**Rationale for 100m**:
-
-1. **Urban Context**: Rio's bus stops are typically 200-500m apart
-   - 100m is small enough to link to the specific stop, not the whole street
-   - Large enough to capture complaints from nearby buildings/intersections
-
-2. **Complaint Precision**: 1746 complaints often have imprecise location data
-   - GPS from mobile may be off 50-100m
-   - 100m accounts for this imprecision without over-linking
-
-3. **Passenger Perspective**: People within 100m of a stop would use it
-   - Problem at nearby intersection affects this stop's users
-   - Beyond 100m, people would likely use different stop
-
-4. **Balance**: 100m is conservative
-   - Too small (50m): Miss legitimate stop-affecting issues
-   - Too large (300m): Attribute problems to wrong stop
-   - 100m is proven standard in urban accessibility metrics (100m = 1-2 min walk)
-
-**Trade-off**: Some complaints might affect multiple overlapping stops, which is correct—if a problem spans an intersection, it affects several nearby stops.
-
-### Temporal Filtering: 30-Day Window
-
-Complaints older than 30 days are excluded from risk calculations:
-
-```cypher
-WHERE rec.data_abertura >= datetime() - duration({days: 30})
+**Example**: 1000m connection between stops with risk 0.2 and 0.8
 ```
-
-**Rationale for 30 days**:
-
-1. **Problem Resolution**: Typical municipal repair cycles are 2-4 weeks
-   - Issue reported → City reviews → Schedules repair → Completes work
-   - By 30 days, properly tracked issues should be fixed or in progress
-
-2. **Actionability**: Risk score should reflect current conditions
-   - Old, unresolved complaints indicate bureaucratic failure, not current danger
-   - Current score helps prioritize today's actions, not historical analysis
-
-3. **Complaint Quality**: Older complaints have stale data
-   - "Street light broken 2 months ago" might already be fixed
-   - Status field may not be updated reliably
-   - Recent complaints more reliable
-
-4. **Prevent Accumulation**: Without decay, adding 1 old complaint is like adding new one
-   - Unfair to stops with historical issues (even if resolved)
-   - Creates "sticky" high risk that's hard to recover from
-
-5. **Statistical Relevance**: 30 days = reasonable sample for patterns
-   - Less than 7 days: Too noisy, random variations
-   - More than 90 days: Misses recent deterioration
-   - 30 days balances noise reduction with recency
-
-**Trade-off**: Doesn't track long-term chronic problems
-- Benefit: Focuses on current action items
-- Cost: Historical context lost
-- Mitigation: Could create separate "chronic issue" metric if needed
-
-### Status Filtering: Open Complaints Only
-
-Only complaints with status 'Aberto' (Open) or 'Em Atendimento' (In Progress) affect risk:
-
-```cypher
-WHERE rec.status IN ['Aberto', 'Em Atendimento']
-```
-
-**Rationale**:
-
-1. **Unresolved Problems**: Closed/resolved issues no longer pose risk
-   - Status 'Fechado' (Closed) = authority determined issue is resolved
-   - Should not penalize a stop for fixed problems
-
-2. **Current Conditions**: Risk score represents NOW, not history
-   - If problem was fixed, current passengers don't face that risk
-   - Keep historical data (for analysis) but exclude from current risk
-
-3. **Motivation for Fixes**: Closed status = progress, removing weight
-   - Gives city incentive to close complaints (mark resolved)
-   - Positive feedback loop: fix problem → lower risk → look better
-
-4. **Prevents Double-Counting**: Some systems create new complaint if reopened
-   - Filtering by status prevents accumulating both old and new versions
-   - Only active issues contribute to current risk
-
-**Data Quality Issue**: Status field may not be reliably updated
-- Some "closed" complaints were never actually fixed
-- Some "open" issues have been waiting months
-- **Mitigated by**: 30-day window (old issues drop naturally after 30 days anyway)
-- **Better solution**: Use complaint resolution date when available
-
-### Connection Cost Adjustment
-
-Risk-adjusted costs propagate risk from stops to relationships:
-
-```cypher
-WITH c.distance_meters AS distance,
-     (s1.risk_score + s2.risk_score) / 2 AS combined_risk
-SET c.risk_adjusted_cost = distance × (1 + combined_risk)
-```
-
-**Example**:
-```
-Stops A→B: 1000m apart
-Stop A risk: 0.2, Stop B risk: 0.8
 combined_risk = (0.2 + 0.8) / 2 = 0.5
-risk_adjusted_cost = 1000m × (1 + 0.5) = 1500m
-
-This makes a high-risk path "feel" 50% longer
-Routing algorithm avoids it when safer alternatives exist
+cost = 1000m × (1 + 0.5) = 1500m
 ```
 
-**Rationale**:
-
-1. **Safety-Aware Routing**: Different from "shortest path"
-   - Pure distance routing ignores risk (unsafe for vulnerable populations)
-   - Risk adjustment allows querying "safest path from A to B"
-
-2. **Multiplicative Adjustment**: Preserves distance information
-   - Risk doesn't replace distance, it modifies it
-   - Still prefer nearby stops, but avoid dangerous ones
-   - If both paths equally dangerous, pick shorter
-
-3. **Averaging Stops**: Uses both endpoints' risk
-   - Avoids high-risk stops on BOTH ends of connection
-   - Traveling through high-risk areas increases perceived cost
-
-4. **Unbounded Risk**: Cost can theoretically become very high
-   - Combined_risk can exceed 1.0 if both stops have risk_score > 0.5
-   - High-risk connections (1.5, 1.8x multiplier) strongly discouraged
-   - But never completely blocked (1+risk is always positive)
-
----
-
-## Summary: Risk Calculation Design Principles
-
-| Principle | Mechanism | Benefit |
-|-----------|-----------|---------|
-| **Differentiate Severity** | Category weights (1.5 to 0.3) | Focus on serious issues |
-| **Quantify Urgency** | Criticality multiplier (0.5 to 1.5) | Respect domain expertise |
-| **Detect Patterns** | Aggregation (sum not just count) | Distinguish noise from systemic |
-| **Normalize Scale** | Sigmoid formula (÷ risk_sum+10) | Bounded 0-1, diminishing returns |
-| **Require Accumulation** | +10 denominator tuning | Avoid reactive responses |
-| **Focus on Present** | 30-day temporal window | Ignore resolved/stale issues |
-| **Exclude Resolved** | Status filtering | Don't penalize fixed problems |
-| **Prioritize Current** | Only open/in-progress complaints | Risk reflects NOW situation |
-| **Apply Spatial Context** | 100m radius | Link only genuinely affected stops |
-| **Enable Routing** | Risk-adjusted costs | Support safety-aware planning |
-
-These design choices create a system that:
-- ✅ Responds to real systemic problems
-- ✅ Ignores noise and isolated complaints
-- ✅ Reflects current conditions, not history
-- ✅ Guides actionable resource allocation
-- ✅ Enables safety-aware transit routing
+This makes high-risk paths "cost more" for routing algorithms, enabling safety-aware transit planning.
 
 ---
 
